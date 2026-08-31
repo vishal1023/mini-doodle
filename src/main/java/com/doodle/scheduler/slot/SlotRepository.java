@@ -11,10 +11,6 @@ import java.util.UUID;
 
 public interface SlotRepository extends JpaRepository<Slot, UUID>, JpaSpecificationExecutor<Slot> {
 
-    // Pessimistic write lock scoped to the single row being booked - makes
-    // "read slot -> check FREE -> flip to BUSY -> insert Meeting" atomic
-    // without relying on optimistic-lock retry for the highest-contention
-    // write path in the system. Held for milliseconds, not a scale risk.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Slot s WHERE s.id = :id")
     Optional<Slot> findByIdForUpdate(UUID id);

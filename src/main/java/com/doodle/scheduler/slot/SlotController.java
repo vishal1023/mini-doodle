@@ -1,6 +1,7 @@
 package com.doodle.scheduler.slot;
 
 import com.doodle.scheduler.generated.api.SlotsApi;
+import com.doodle.scheduler.generated.model.AvailabilityDto;
 import com.doodle.scheduler.generated.model.CreateSlotRequestDto;
 import com.doodle.scheduler.generated.model.SlotPageDto;
 import com.doodle.scheduler.generated.model.SlotResponseDto;
@@ -20,9 +21,11 @@ import java.util.UUID;
 public class SlotController implements SlotsApi {
 
     private final SlotService slotService;
+    private final AvailabilityService availabilityService;
 
-    public SlotController(SlotService slotService) {
+    public SlotController(SlotService slotService, AvailabilityService availabilityService) {
         this.slotService = slotService;
+        this.availabilityService = availabilityService;
     }
 
     @Override
@@ -64,6 +67,16 @@ public class SlotController implements SlotsApi {
             case DELETED -> ResponseEntity.noContent().build();
             case NOT_FOUND -> ResponseEntity.notFound().build();
             case CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT).build();
+        };
+    }
+
+    @Override
+    public ResponseEntity<AvailabilityDto> getAvailability(UUID userId, OffsetDateTime from, OffsetDateTime to) {
+        AvailabilityOutcome outcome = availabilityService.getAvailability(userId, from.toInstant(), to.toInstant());
+        return switch (outcome) {
+            case AvailabilityOutcome.Available available -> ResponseEntity.ok(available.availability());
+            case AvailabilityOutcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case AvailabilityOutcome.InvalidRange ignored -> ResponseEntity.badRequest().build();
         };
     }
 }

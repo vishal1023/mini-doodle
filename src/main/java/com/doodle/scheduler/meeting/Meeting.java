@@ -47,10 +47,6 @@ public class Meeting {
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
-    // Pure join table, no attributes of its own beyond the two FKs, so an
-    // @ElementCollection is a natural fit - no separate entity class needed.
-    // Organizer is never included here; organizerId is the sole source of
-    // truth for who booked the meeting.
     @ElementCollection
     @CollectionTable(name = "meeting_participants", joinColumns = @JoinColumn(name = "meeting_id"))
     @Column(name = "user_id")
@@ -118,9 +114,6 @@ public class Meeting {
     public void updateDetails(String title, String description, Set<UUID> participantIds) {
         this.title = title;
         this.description = description;
-        // Mutate in place rather than reassigning the field - Hibernate
-        // manages this collection via a wrapper tied to the original
-        // instance, so a fresh Set here would break dirty-checking.
         this.participantIds.clear();
         this.participantIds.addAll(participantIds);
     }

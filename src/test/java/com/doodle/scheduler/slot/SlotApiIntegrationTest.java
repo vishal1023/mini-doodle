@@ -217,4 +217,86 @@ class SlotApiIntegrationTest extends AbstractIntegrationTest {
                                 """.formatted(startTime, durationMinutes)))
                 .andExpect(status().isCreated());
     }
+
+    @Test
+    void getAvailability_mergesTouchingSlotsOfSameStatus() throws Exception {
+        UUID userId = createUser();
+        createSlot(userId, "2026-06-01T09:00:00Z", 60);
+        createSlot(userId, "2026-06-01T10:00:00Z", 60);
+
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", userId)
+                        .param("from", "2026-06-01T00:00:00Z")
+                        .param("to", "2026-06-02T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intervals.length()").value(1))
+                .andExpect(jsonPath("$.intervals[0].start").value("2026-06-01T09:00:00Z"))
+                .andExpect(jsonPath("$.intervals[0].end").value("2026-06-01T11:00:00Z"))
+                .andExpect(jsonPath("$.intervals[0].status").value("FREE"));
+    }
+
+    @Test
+    void getAvailability_clipsIntervalsToRequestedWindow() throws Exception {
+        UUID userId = createUser();
+        createSlot(userId, "2026-06-02T09:00:00Z", 120);
+
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", userId)
+                        .param("from", "2026-06-02T10:00:00Z")
+                        .param("to", "2026-06-02T11:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intervals.length()").value(1))
+                .andExpect(jsonPath("$.intervals[0].start").value("2026-06-02T10:00:00Z"))
+                .andExpect(jsonPath("$.intervals[0].end").value("2026-06-02T11:00:00Z"));
+    }
+
+    @Test
+    void getAvailability_showsBusyStatusForBookedSlots() throws Exception {
+        UUID userId = createUser();
+        UUID slotId = createSlotAndReturnId(userId, "2026-06-03T09:00:00Z", 30);
+        jdbcTemplate.update("UPDATE slots SET status = 'BUSY' WHERE id = ?", slotId);
+
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", userId)
+                        .param("from", "2026-06-03T00:00:00Z")
+                        .param("to", "2026-06-04T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intervals[0].status").value("BUSY"));
+    }
+
+    @Test
+    void getAvailability_noSlots_returnsEmptyIntervals() throws Exception {
+        UUID userId = createUser();
+
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", userId)
+                        .param("from", "2026-06-05T00:00:00Z")
+                        .param("to", "2026-06-06T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.intervals").isEmpty());
+    }
+
+    @Test
+    void getAvailability_toBeforeFrom_returnsBadRequest() throws Exception {
+        UUID userId = createUser();
+
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", userId)
+                        .param("from", "2026-06-05T00:00:00Z")
+                        .param("to", "2026-06-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getAvailability_windowExceeding31Days_returnsBadRequest() throws Exception {
+        UUID userId = createUser();
+
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", userId)
+                        .param("from", "2026-01-01T00:00:00Z")
+                        .param("to", "2026-03-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getAvailability_forNonExistentUser_returnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/users/{userId}/availability", UUID.randomUUID())
+                        .param("from", "2026-06-05T00:00:00Z")
+                        .param("to", "2026-06-06T00:00:00Z"))
+                .andExpect(status().isNotFound());
+    }
 }

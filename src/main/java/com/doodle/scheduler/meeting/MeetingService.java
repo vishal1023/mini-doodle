@@ -73,8 +73,6 @@ public class MeetingService {
         }
 
         meeting.cancel();
-        // Reuses the same pessimistic lock the booking path relies on, since
-        // this is the same slot-state transition in reverse.
         slotRepository.findByIdForUpdate(meeting.getSlotId())
                 .ifPresent(Slot::markFree);
 

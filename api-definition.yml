@@ -358,6 +358,45 @@ paths:
                 $ref: '#/components/schemas/MeetingPageDto'
         '404':
           description: User not found
+  /api/v1/users/{userId}/availability:
+    get:
+      tags: [Slots]
+      summary: Get aggregated free/busy availability for a time window
+      description: >
+        Returns a flat list of intervals covering only explicitly-defined
+        time. Time not covered by any interval in the response has no
+        defined slot for this user - it is not implied to be free or busy.
+      operationId: getAvailability
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Aggregated availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityDto'
+        '400':
+          description: Invalid or excessively large time window
+        '404':
+          description: User not found
 components:
   schemas:
     CreateUserRequestDto:
@@ -494,3 +533,32 @@ components:
         totalElements:
           type: integer
           format: int64
+    SlotIntervalDto:
+      type: object
+      required: [start, end, status]
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/SlotStatusDto'
+    AvailabilityDto:
+      type: object
+      required: [userId, from, to, intervals]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        intervals:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotIntervalDto'
