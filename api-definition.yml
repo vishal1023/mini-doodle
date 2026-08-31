@@ -1,0 +1,86 @@
+openapi: 3.0.3
+info:
+  title: Mini Doodle Scheduler API
+  description: >
+    Meeting scheduling platform API. Users manage time slots on their
+    personal calendar and convert slots into meetings with participants.
+  version: "1.0.0"
+servers:
+  - url: /
+tags:
+  - name: Users
+    description: User management
+paths:
+  /api/v1/users:
+    post:
+      tags: [Users]
+      summary: Create a user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequestDto'
+      responses:
+        '201':
+          description: User created
+          headers:
+            Location:
+              description: URL of the created user
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+        '400':
+          description: Validation failed
+  /api/v1/users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get a user by id
+      operationId: getUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+        '404':
+          description: User not found
+components:
+  schemas:
+    CreateUserRequestDto:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+          minLength: 1
+    UserResponseDto:
+      type: object
+      required: [id, name, email, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time

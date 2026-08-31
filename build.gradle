@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.6'
+    id 'org.openapi.generator' version '6.3.0'
 }
 
 group = 'com.doodle'
@@ -24,11 +25,51 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
     runtimeOnly 'org.postgresql:postgresql'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+def apiDefinition = "$rootDir/api-definition.yml"
+def generatedDir = "$buildDir/generated/openapi"
+
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = apiDefinition
+    outputDir = generatedDir
+    apiPackage = "com.doodle.scheduler.generated.api"
+    modelPackage = "com.doodle.scheduler.generated.model"
+    configOptions = [
+        interfaceOnly     : "true",
+        useSpringBoot3    : "true",
+        useTags           : "true",
+        useBeanValidation : "true",
+        dateLibrary       : "java8",
+        documentationProvider: "none"
+    ]
+}
+
+sourceSets.main.java.srcDirs += "$generatedDir/src/main/java"
+
+compileJava.dependsOn tasks.named('openApiGenerate')
+
+// api-definition.yml is authored once at the repo root; this copy is what
+// Swagger UI is served from at runtime, so the running app can still show
+// live docs without a second hand-maintained copy of the contract.
+tasks.register('copyApiDefinition', Copy) {
+    from apiDefinition
+    into "$buildDir/resources/main/static"
+}
+
+tasks.named('processResources') {
+    dependsOn tasks.named('copyApiDefinition')
 }

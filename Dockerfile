@@ -5,6 +5,7 @@ COPY gradlew settings.gradle build.gradle ./
 COPY gradle ./gradle
 RUN chmod +x gradlew && ./gradlew --no-daemon dependencies || true
 
+COPY api-definition.yml ./
 COPY src ./src
 RUN ./gradlew --no-daemon bootJar -x test
 
