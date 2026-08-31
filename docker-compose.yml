@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: doodle
       POSTGRES_PASSWORD: doodle
     ports:
-      - "5433:5432"
+      - "${DB_HOST_PORT:-5432}:5432"
     volumes:
       - doodle-postgres-data:/var/lib/postgresql/data
     healthcheck:
