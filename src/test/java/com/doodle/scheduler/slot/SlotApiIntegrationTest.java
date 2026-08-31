@@ -299,4 +299,37 @@ class SlotApiIntegrationTest extends AbstractIntegrationTest {
                         .param("to", "2026-06-06T00:00:00Z"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void createSlot_overlappingExistingSlot_returnsConflict() throws Exception {
+        UUID userId = createUser();
+        createSlot(userId, "2026-07-01T09:00:00Z", 60);
+
+        mockMvc.perform(post("/api/v1/users/{userId}/slots", userId)
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "2026-07-01T09:30:00Z", "durationMinutes": 60}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void updateSlot_intoOverlapWithAnotherSlot_returnsConflict() throws Exception {
+        UUID userId = createUser();
+        createSlot(userId, "2026-07-02T09:00:00Z", 60);
+        UUID movableSlotId = createSlotAndReturnId(userId, "2026-07-02T14:00:00Z", 60);
+
+        mockMvc.perform(patch("/api/v1/users/{userId}/slots/{slotId}", userId, movableSlotId)
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "2026-07-02T09:30:00Z", "durationMinutes": 60}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void getSlots_withMalformedUserId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/users/not-a-uuid/slots"))
+                .andExpect(status().isBadRequest());
+    }
 }

@@ -68,4 +68,27 @@ class UserApiIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/users/00000000-0000-0000-0000-000000000000"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void createUser_withDuplicateEmail_returnsConflict() throws Exception {
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType("application/json")
+                        .content("""
+                                {"name": "First", "email": "duplicate@example.com"}
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType("application/json")
+                        .content("""
+                                {"name": "Second", "email": "duplicate@example.com"}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void getUser_withMalformedId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/users/not-a-uuid"))
+                .andExpect(status().isBadRequest());
+    }
 }
