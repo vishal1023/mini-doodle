@@ -22,6 +22,8 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,11 +55,19 @@ class MeetingApiIntegrationTest extends AbstractIntegrationTest {
     }
 
     private UUID bookSlotAndReturnMeetingId(UUID organizerId, UUID slotId) throws Exception {
+        return bookSlotAndReturnMeetingId(organizerId, slotId, List.of());
+    }
+
+    private UUID bookSlotAndReturnMeetingId(UUID organizerId, UUID slotId, List<UUID> participantIds) throws Exception {
+        String participantsJson = participantIds.stream()
+                .map(id -> "\"" + id + "\"")
+                .reduce((a, b) -> a + "," + b)
+                .orElse("");
         String body = mockMvc.perform(post("/api/v1/users/{userId}/slots/{slotId}/meetings", organizerId, slotId)
                         .contentType("application/json")
                         .content("""
-                                {"title": "Sync", "participantUserIds": []}
-                                """))
+                                {"title": "Sync", "participantUserIds": [%s]}
+                                """.formatted(participantsJson)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return UUID.fromString(objectMapper.readTree(body).get("id").asText());
@@ -271,6 +281,111 @@ class MeetingApiIntegrationTest extends AbstractIntegrationTest {
     @Test
     void cancelMeeting_nonExistent_returnsNotFound() throws Exception {
         mockMvc.perform(delete("/api/v1/meetings/{meetingId}", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getMeeting_returnsDetails() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID meetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+
+        mockMvc.perform(get("/api/v1/meetings/{meetingId}", meetingId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(meetingId.toString()))
+                .andExpect(jsonPath("$.title").value("Sync"));
+    }
+
+    @Test
+    void getMeeting_nonExistent_returnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/meetings/{meetingId}", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateMeeting_whenScheduled_returnsUpdatedMeeting() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID meetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+        UUID participantId = createUser();
+
+        mockMvc.perform(patch("/api/v1/meetings/{meetingId}", meetingId)
+                        .contentType("application/json")
+                        .content("""
+                                {"title": "Renamed", "description": "Updated", "participantUserIds": ["%s"]}
+                                """.formatted(participantId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Renamed"))
+                .andExpect(jsonPath("$.description").value("Updated"))
+                .andExpect(jsonPath("$.participantUserIds[0]").value(participantId.toString()));
+    }
+
+    @Test
+    void updateMeeting_whenCancelled_returnsConflict() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID meetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+        mockMvc.perform(delete("/api/v1/meetings/{meetingId}", meetingId)).andExpect(status().isNoContent());
+
+        mockMvc.perform(patch("/api/v1/meetings/{meetingId}", meetingId)
+                        .contentType("application/json")
+                        .content("""
+                                {"title": "Renamed", "participantUserIds": []}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void updateMeeting_withNonExistentParticipant_returnsBadRequest() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID meetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+
+        mockMvc.perform(patch("/api/v1/meetings/{meetingId}", meetingId)
+                        .contentType("application/json")
+                        .content("""
+                                {"title": "Renamed", "participantUserIds": ["%s"]}
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void updateMeeting_nonExistent_returnsNotFound() throws Exception {
+        mockMvc.perform(patch("/api/v1/meetings/{meetingId}", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content("""
+                                {"title": "Renamed", "participantUserIds": []}
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listMeetings_filtersByRole() throws Exception {
+        UUID userA = createUser();
+        UUID userB = createUser();
+        UUID slotOwnedByA = createSlot(userA);
+        UUID slotOwnedByB = createSlot(userB);
+        bookSlotAndReturnMeetingId(userA, slotOwnedByA, List.of(userB));
+        bookSlotAndReturnMeetingId(userB, slotOwnedByB, List.of(userA));
+
+        mockMvc.perform(get("/api/v1/users/{userId}/meetings", userA).param("role", "ORGANIZER"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].organizerId").value(userA.toString()));
+
+        mockMvc.perform(get("/api/v1/users/{userId}/meetings", userA).param("role", "PARTICIPANT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].organizerId").value(userB.toString()));
+
+        mockMvc.perform(get("/api/v1/users/{userId}/meetings", userA).param("role", "ANY"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void listMeetings_forNonExistentUser_returnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/users/{userId}/meetings", UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
 }

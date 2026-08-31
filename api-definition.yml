@@ -250,6 +250,56 @@ paths:
         '409':
           description: Slot is already booked
   /api/v1/meetings/{meetingId}:
+    get:
+      tags: [Meetings]
+      summary: Get a meeting by id
+      operationId: getMeeting
+      parameters:
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Meeting found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingResponseDto'
+        '404':
+          description: Meeting not found
+    patch:
+      tags: [Meetings]
+      summary: Modify a meeting's title, description, and participants
+      operationId: updateMeeting
+      parameters:
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMeetingRequestDto'
+      responses:
+        '200':
+          description: Meeting updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingResponseDto'
+        '400':
+          description: Validation failed, or a participant does not exist
+        '404':
+          description: Meeting not found
+        '409':
+          description: Meeting is cancelled and cannot be modified
     delete:
       tags: [Meetings]
       summary: Cancel a meeting
@@ -268,6 +318,46 @@ paths:
           description: Meeting not found
         '409':
           description: Meeting is already cancelled
+  /api/v1/users/{userId}/meetings:
+    get:
+      tags: [Meetings]
+      summary: List a user's meetings
+      operationId: listMeetings
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MeetingRoleDto'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+      responses:
+        '200':
+          description: Page of meetings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingPageDto'
+        '404':
+          description: User not found
 components:
   schemas:
     CreateUserRequestDto:
@@ -385,3 +475,22 @@ components:
         createdAt:
           type: string
           format: date-time
+    MeetingRoleDto:
+      type: string
+      enum: [ORGANIZER, PARTICIPANT, ANY]
+      default: ANY
+    MeetingPageDto:
+      type: object
+      required: [content, page, size, totalElements]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeetingResponseDto'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64

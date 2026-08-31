@@ -114,4 +114,14 @@ public class Meeting {
         this.status = MeetingStatus.CANCELLED;
         this.cancelledAt = Instant.now();
     }
+
+    public void updateDetails(String title, String description, Set<UUID> participantIds) {
+        this.title = title;
+        this.description = description;
+        // Mutate in place rather than reassigning the field - Hibernate
+        // manages this collection via a wrapper tied to the original
+        // instance, so a fresh Set here would break dirty-checking.
+        this.participantIds.clear();
+        this.participantIds.addAll(participantIds);
+    }
 }
