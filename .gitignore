@@ -32,3 +32,6 @@ bin/
 
 ### Env ###
 .env
+
+### Claude Code ###
+.claude/

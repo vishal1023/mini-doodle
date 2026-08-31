@@ -10,6 +10,8 @@ servers:
 tags:
   - name: Users
     description: User management
+  - name: Slots
+    description: Time slot management
 paths:
   /api/v1/users:
     post:
@@ -57,6 +59,91 @@ paths:
                 $ref: '#/components/schemas/UserResponseDto'
         '404':
           description: User not found
+  /api/v1/users/{userId}/slots:
+    post:
+      tags: [Slots]
+      summary: Create a time slot
+      operationId: createSlot
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSlotRequestDto'
+      responses:
+        '201':
+          description: Slot created
+          headers:
+            Location:
+              description: URL of the created slot
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotResponseDto'
+        '400':
+          description: Validation failed
+        '404':
+          description: User not found
+    get:
+      tags: [Slots]
+      summary: List time slots for a user
+      operationId: listSlots
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SlotStatusDto'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+      responses:
+        '200':
+          description: Page of slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotPageDto'
+        '404':
+          description: User not found
 components:
   schemas:
     CreateUserRequestDto:
@@ -84,3 +171,49 @@ components:
         createdAt:
           type: string
           format: date-time
+    SlotStatusDto:
+      type: string
+      enum: [FREE, BUSY]
+    CreateSlotRequestDto:
+      type: object
+      required: [startTime, durationMinutes]
+      properties:
+        startTime:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+    SlotResponseDto:
+      type: object
+      required: [id, userId, startTime, endTime, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/SlotStatusDto'
+    SlotPageDto:
+      type: object
+      required: [content, page, size, totalElements]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotResponseDto'
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
