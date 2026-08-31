@@ -249,6 +249,25 @@ paths:
           description: User or slot not found
         '409':
           description: Slot is already booked
+  /api/v1/meetings/{meetingId}:
+    delete:
+      tags: [Meetings]
+      summary: Cancel a meeting
+      operationId: cancelMeeting
+      parameters:
+        - name: meetingId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Meeting cancelled, slot reverted to free
+        '404':
+          description: Meeting not found
+        '409':
+          description: Meeting is already cancelled
 components:
   schemas:
     CreateUserRequestDto:

@@ -5,6 +5,7 @@ import com.doodle.scheduler.slot.Slot;
 import com.doodle.scheduler.slot.SlotRepository;
 import com.doodle.scheduler.user.User;
 import com.doodle.scheduler.user.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,6 +38,9 @@ class MeetingApiIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private UUID createUser() {
         User user = userRepository.save(new User("Test User", "user-" + UUID.randomUUID() + "@example.com"));
         return user.getId();
@@ -45,6 +50,17 @@ class MeetingApiIntegrationTest extends AbstractIntegrationTest {
         Instant start = Instant.now().plus(1, ChronoUnit.DAYS);
         Slot slot = slotRepository.save(new Slot(userId, start, start.plusSeconds(1800)));
         return slot.getId();
+    }
+
+    private UUID bookSlotAndReturnMeetingId(UUID organizerId, UUID slotId) throws Exception {
+        String body = mockMvc.perform(post("/api/v1/users/{userId}/slots/{slotId}/meetings", organizerId, slotId)
+                        .contentType("application/json")
+                        .content("""
+                                {"title": "Sync", "participantUserIds": []}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return UUID.fromString(objectMapper.readTree(body).get("id").asText());
     }
 
     @Test
@@ -199,5 +215,62 @@ class MeetingApiIntegrationTest extends AbstractIntegrationTest {
         String slotStatus = jdbcTemplate.queryForObject(
                 "SELECT status FROM slots WHERE id = ?", String.class, slotId);
         assertThat(slotStatus).isEqualTo("BUSY");
+    }
+
+    @Test
+    void cancelMeeting_revertsSlotToFreeAndSoftCancelsMeeting() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID meetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+
+        mockMvc.perform(delete("/api/v1/meetings/{meetingId}", meetingId))
+                .andExpect(status().isNoContent());
+
+        String meetingStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM meetings WHERE id = ?", String.class, meetingId);
+        assertThat(meetingStatus).isEqualTo("CANCELLED");
+
+        Instant cancelledAt = jdbcTemplate.queryForObject(
+                "SELECT cancelled_at FROM meetings WHERE id = ?", Instant.class, meetingId);
+        assertThat(cancelledAt).isNotNull();
+
+        String slotStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM slots WHERE id = ?", String.class, slotId);
+        assertThat(slotStatus).isEqualTo("FREE");
+    }
+
+    @Test
+    void cancelMeeting_allowsRebookingTheSameSlot() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID firstMeetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+
+        mockMvc.perform(delete("/api/v1/meetings/{meetingId}", firstMeetingId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/users/{userId}/slots/{slotId}/meetings", organizerId, slotId)
+                        .contentType("application/json")
+                        .content("""
+                                {"title": "Rebooked", "participantUserIds": []}
+                                """))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void cancelMeeting_alreadyCancelled_returnsConflict() throws Exception {
+        UUID organizerId = createUser();
+        UUID slotId = createSlot(organizerId);
+        UUID meetingId = bookSlotAndReturnMeetingId(organizerId, slotId);
+        mockMvc.perform(delete("/api/v1/meetings/{meetingId}", meetingId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(delete("/api/v1/meetings/{meetingId}", meetingId))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void cancelMeeting_nonExistent_returnsNotFound() throws Exception {
+        mockMvc.perform(delete("/api/v1/meetings/{meetingId}", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
     }
 }

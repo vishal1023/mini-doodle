@@ -32,4 +32,14 @@ public class MeetingController implements MeetingsApi {
             case BookingOutcome.InvalidParticipants ignored -> ResponseEntity.badRequest().build();
         };
     }
+
+    @Override
+    public ResponseEntity<Void> cancelMeeting(UUID meetingId) {
+        CancellationOutcome outcome = meetingService.cancelMeeting(meetingId);
+        return switch (outcome) {
+            case CANCELLED -> ResponseEntity.noContent().build();
+            case NOT_FOUND -> ResponseEntity.notFound().build();
+            case CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT).build();
+        };
+    }
 }

@@ -54,4 +54,25 @@ public class MeetingService {
 
         return new BookingOutcome.Booked(MeetingMapper.toDto(meeting));
     }
+
+    @Transactional
+    public CancellationOutcome cancelMeeting(UUID meetingId) {
+        Optional<Meeting> maybeMeeting = meetingRepository.findById(meetingId);
+        if (maybeMeeting.isEmpty()) {
+            return CancellationOutcome.NOT_FOUND;
+        }
+
+        Meeting meeting = maybeMeeting.get();
+        if (meeting.isCancelled()) {
+            return CancellationOutcome.CONFLICT;
+        }
+
+        meeting.cancel();
+        // Reuses the same pessimistic lock the booking path relies on, since
+        // this is the same slot-state transition in reverse.
+        slotRepository.findByIdForUpdate(meeting.getSlotId())
+                .ifPresent(Slot::markFree);
+
+        return CancellationOutcome.CANCELLED;
+    }
 }

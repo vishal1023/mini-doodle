@@ -104,4 +104,8 @@ public class Slot {
     public void markBusy() {
         this.status = SlotStatus.BUSY;
     }
+
+    public void markFree() {
+        this.status = SlotStatus.FREE;
+    }
 }

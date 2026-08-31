@@ -105,4 +105,13 @@ public class Meeting {
     public Set<UUID> getParticipantIds() {
         return participantIds;
     }
+
+    public boolean isCancelled() {
+        return status == MeetingStatus.CANCELLED;
+    }
+
+    public void cancel() {
+        this.status = MeetingStatus.CANCELLED;
+        this.cancelledAt = Instant.now();
+    }
 }
