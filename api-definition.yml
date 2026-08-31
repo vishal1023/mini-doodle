@@ -12,6 +12,8 @@ tags:
     description: User management
   - name: Slots
     description: Time slot management
+  - name: Meetings
+    description: Meeting scheduling
 paths:
   /api/v1/users:
     post:
@@ -205,6 +207,48 @@ paths:
           description: User or slot not found
         '409':
           description: Slot is booked and cannot be deleted
+  /api/v1/users/{userId}/slots/{slotId}/meetings:
+    post:
+      tags: [Meetings]
+      summary: Book a slot into a meeting
+      operationId: bookSlot
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMeetingRequestDto'
+      responses:
+        '201':
+          description: Meeting created
+          headers:
+            Location:
+              description: URL of the created meeting
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingResponseDto'
+        '400':
+          description: Validation failed, or a participant does not exist
+        '404':
+          description: User or slot not found
+        '409':
+          description: Slot is already booked
 components:
   schemas:
     CreateUserRequestDto:
@@ -278,3 +322,47 @@ components:
         totalElements:
           type: integer
           format: int64
+    MeetingStatusDto:
+      type: string
+      enum: [SCHEDULED, CANCELLED]
+    CreateMeetingRequestDto:
+      type: object
+      required: [title, participantUserIds]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        participantUserIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    MeetingResponseDto:
+      type: object
+      required: [id, slotId, organizerId, title, status, participantUserIds, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slotId:
+          type: string
+          format: uuid
+        organizerId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/MeetingStatusDto'
+        participantUserIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        createdAt:
+          type: string
+          format: date-time

@@ -100,4 +100,8 @@ public class Slot {
     public boolean isFree() {
         return status == SlotStatus.FREE;
     }
+
+    public void markBusy() {
+        this.status = SlotStatus.BUSY;
+    }
 }
