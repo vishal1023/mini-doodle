@@ -3,12 +3,16 @@ package com.doodle.scheduler.slot;
 import com.doodle.scheduler.AbstractIntegrationTest;
 import com.doodle.scheduler.user.User;
 import com.doodle.scheduler.user.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -19,9 +23,30 @@ class SlotApiIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     private UUID createUser() {
         User user = userRepository.save(new User("Test User", "user-" + UUID.randomUUID() + "@example.com"));
         return user.getId();
+    }
+
+    private UUID createSlotAndReturnId(UUID userId, String startTime, int durationMinutes) throws Exception {
+        String body = mockMvc.perform(post("/api/v1/users/{userId}/slots", userId)
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "%s", "durationMinutes": %d}
+                                """.formatted(startTime, durationMinutes)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return UUID.fromString(objectMapper.readTree(body).get("id").asText());
+    }
+
+    private void markBusy(UUID slotId) {
+        jdbcTemplate.update("UPDATE slots SET status = 'BUSY' WHERE id = ?", slotId);
     }
 
     @Test
@@ -95,6 +120,92 @@ class SlotApiIntegrationTest extends AbstractIntegrationTest {
     @Test
     void listSlots_forNonExistentUser_returnsNotFound() throws Exception {
         mockMvc.perform(get("/api/v1/users/{userId}/slots", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateSlot_whenFree_returnsUpdatedSlot() throws Exception {
+        UUID userId = createUser();
+        UUID slotId = createSlotAndReturnId(userId, "2026-05-01T09:00:00Z", 30);
+
+        mockMvc.perform(patch("/api/v1/users/{userId}/slots/{slotId}", userId, slotId)
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "2026-05-01T11:00:00Z", "durationMinutes": 45}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startTime").value("2026-05-01T11:00:00Z"))
+                .andExpect(jsonPath("$.endTime").value("2026-05-01T11:45:00Z"));
+    }
+
+    @Test
+    void updateSlot_whenBusy_returnsConflict() throws Exception {
+        UUID userId = createUser();
+        UUID slotId = createSlotAndReturnId(userId, "2026-05-02T09:00:00Z", 30);
+        markBusy(slotId);
+
+        mockMvc.perform(patch("/api/v1/users/{userId}/slots/{slotId}", userId, slotId)
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "2026-05-02T11:00:00Z", "durationMinutes": 45}
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void updateSlot_nonExistentSlot_returnsNotFound() throws Exception {
+        UUID userId = createUser();
+
+        mockMvc.perform(patch("/api/v1/users/{userId}/slots/{slotId}", userId, UUID.randomUUID())
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "2026-05-02T11:00:00Z", "durationMinutes": 45}
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateSlot_belongingToDifferentUser_returnsNotFound() throws Exception {
+        UUID ownerId = createUser();
+        UUID otherUserId = createUser();
+        UUID slotId = createSlotAndReturnId(ownerId, "2026-05-03T09:00:00Z", 30);
+
+        mockMvc.perform(patch("/api/v1/users/{userId}/slots/{slotId}", otherUserId, slotId)
+                        .contentType("application/json")
+                        .content("""
+                                {"startTime": "2026-05-03T11:00:00Z", "durationMinutes": 45}
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteSlot_whenFree_returnsNoContent() throws Exception {
+        UUID userId = createUser();
+        UUID slotId = createSlotAndReturnId(userId, "2026-05-04T09:00:00Z", 30);
+
+        mockMvc.perform(delete("/api/v1/users/{userId}/slots/{slotId}", userId, slotId))
+                .andExpect(status().isNoContent());
+
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM slots WHERE id = ?", Integer.class, slotId);
+        org.assertj.core.api.Assertions.assertThat(count).isZero();
+    }
+
+    @Test
+    void deleteSlot_whenBusy_returnsConflict() throws Exception {
+        UUID userId = createUser();
+        UUID slotId = createSlotAndReturnId(userId, "2026-05-05T09:00:00Z", 30);
+        markBusy(slotId);
+
+        mockMvc.perform(delete("/api/v1/users/{userId}/slots/{slotId}", userId, slotId))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void deleteSlot_nonExistentSlot_returnsNotFound() throws Exception {
+        UUID userId = createUser();
+
+        mockMvc.perform(delete("/api/v1/users/{userId}/slots/{slotId}", userId, UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
 

@@ -91,4 +91,13 @@ public class Slot {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public void updateWindow(Instant startTime, Instant endTime) {
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    public boolean isFree() {
+        return status == SlotStatus.FREE;
+    }
 }

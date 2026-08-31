@@ -7,6 +7,7 @@ import com.doodle.scheduler.generated.model.SlotResponseDto;
 import com.doodle.scheduler.generated.model.SlotStatusDto;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,5 +45,25 @@ public class SlotController implements SlotsApi {
         return slotService.listSlots(userId, slotStatus, fromInstant, toInstant, pageable)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @Override
+    public ResponseEntity<SlotResponseDto> updateSlot(UUID userId, UUID slotId, CreateSlotRequestDto createSlotRequestDto) {
+        SlotUpdateOutcome outcome = slotService.updateSlot(userId, slotId, createSlotRequestDto);
+        return switch (outcome) {
+            case SlotUpdateOutcome.Updated updated -> ResponseEntity.ok(updated.slot());
+            case SlotUpdateOutcome.NotFound ignored -> ResponseEntity.notFound().build();
+            case SlotUpdateOutcome.Conflict ignored -> ResponseEntity.status(HttpStatus.CONFLICT).build();
+        };
+    }
+
+    @Override
+    public ResponseEntity<Void> deleteSlot(UUID userId, UUID slotId) {
+        SlotDeleteOutcome outcome = slotService.deleteSlot(userId, slotId);
+        return switch (outcome) {
+            case DELETED -> ResponseEntity.noContent().build();
+            case NOT_FOUND -> ResponseEntity.notFound().build();
+            case CONFLICT -> ResponseEntity.status(HttpStatus.CONFLICT).build();
+        };
     }
 }
